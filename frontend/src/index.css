@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-slate-200 antialiased;
+    background-image:
+      radial-gradient(60rem 40rem at 12% -10%, rgba(23, 201, 141, 0.18), transparent 60%),
+      radial-gradient(50rem 35rem at 100% 0%, rgba(56, 130, 246, 0.16), transparent 55%),
+      radial-gradient(40rem 40rem at 50% 120%, rgba(139, 92, 246, 0.14), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-mint-500/30 text-white;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply border border-white/10 bg-white/[0.04] backdrop-blur-xl;
+  }
+
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-white/10;
+  }
+
+  .prose-answer {
+    @apply text-[15px] leading-7 text-slate-200;
+  }
+
+  .prose-answer h1,
+  .prose-answer h2,
+  .prose-answer h3 {
+    @apply mb-2 mt-4 font-semibold text-white first:mt-0;
+  }
+
+  .prose-answer p {
+    @apply mb-3 last:mb-0;
+  }
+
+  .prose-answer ul {
+    @apply mb-3 list-disc space-y-1 pl-5 marker:text-mint-400;
+  }
+
+  .prose-answer ol {
+    @apply mb-3 list-decimal space-y-1 pl-5 marker:text-mint-400;
+  }
+
+  .prose-answer strong {
+    @apply font-semibold text-white;
+  }
+
+  .prose-answer code {
+    @apply rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-mint-300;
+  }
+
+  .prose-answer a {
+    @apply text-mint-300 underline underline-offset-2;
+  }
+
+  .prose-answer table {
+    @apply mb-3 w-full border-collapse text-left text-sm;
+  }
+
+  .prose-answer th,
+  .prose-answer td {
+    @apply border border-white/10 px-3 py-2;
+  }
+}
