@@ -1,8 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from rag import ask
-
 router = APIRouter()
 
 
@@ -35,6 +33,9 @@ def ask_question(data: dict):
     question = data.get("question", "")
 
     print(f"Received question: {question}")
+
+    # Lazy import so server boots in milliseconds
+    from rag import ask
 
     answer = ask(question)
 
