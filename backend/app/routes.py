@@ -6,10 +6,26 @@ from rag import ask
 router = APIRouter()
 
 
+@router.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "Prescription Audit API",
+        "endpoints": {
+            "health": "/api/health",
+            "ask": "/api/ask",
+            "docs": "/docs"
+        }
+    }
+
+
 @router.get("/api/health")
 def health_check():
     return {
-        "status": "ok",
+        "status": "ready",
+        "ready": True,
+        "demo": False,
+        "detail": None,
         "message": "Prescription Audit Backend is running"
     }
 

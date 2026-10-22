@@ -17,7 +17,13 @@ important_sections = {
     "PRECAUTIONS",
     "ADVERSE REACTIONS",
     "DOSAGE AND ADMINISTRATION",
-    "DRUG INTERACTIONS"
+    "DRUG INTERACTIONS",
+    "INGREDIENTS",
+    "ACTIVE INGREDIENT",
+    "ACTIVE INGREDIENTS",
+    "INACTIVE INGREDIENT",
+    "INACTIVE INGREDIENTS",
+    "COMPOSITION"
 }
 
 sections = root.xpath("//hl7:section", namespaces=ns)

@@ -6,3 +6,9 @@ chroma_storage/
 .vscode/
 .idea/
 *.zip
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local

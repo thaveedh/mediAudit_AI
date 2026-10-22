@@ -15,7 +15,7 @@ from vector_db.chroma_db import collection
 # ============================================================
 
 DATASET_PATH = Path(
-    r"C:\Users\raghu\Downloads\dm_spl_release_human_rx_part1\prescription"
+    r"C:\Users\thave\Downloads\dm_spl_release_human_rx_part6\prescription"
 )
 
 # XML Namespace
@@ -33,7 +33,14 @@ important_sections = {
     "PRECAUTIONS",
     "ADVERSE REACTIONS",
     "DOSAGE AND ADMINISTRATION",
-    "DRUG INTERACTIONS"
+    "DRUG INTERACTIONS",
+    "INGREDIENTS",
+    "INGREDIENTS AND APPEARANCE",
+    "ACTIVE INGREDIENT",
+    "ACTIVE INGREDIENTS",
+    "INACTIVE INGREDIENT",
+    "INACTIVE INGREDIENTS",
+    "COMPOSITION"
 }
 
 medicine_count = 0
@@ -72,18 +79,31 @@ for zip_file in DATASET_PATH.glob("*.zip"):
         # Extract Medicine Name
         # ====================================================
 
-        medicine_name = zip_file.stem
+        medicine_name = None
 
-        medicine_tags = root.xpath(
+        name_paths = [
             "//hl7:manufacturedMedicine/hl7:name",
-            namespaces=ns
-        )
+            "//hl7:manufacturedProduct/hl7:manufacturedMedicine/hl7:name",
+            "//hl7:manufacturedProduct/hl7:name",
+        ]
 
-        if medicine_tags:
+        for path in name_paths:
+            medicine_tags = root.xpath(path, namespaces=ns)
 
-            medicine_name = " ".join(
-                medicine_tags[0].itertext()
-            ).strip()
+            if medicine_tags:
+                name = " ".join(
+                    medicine_tags[0].itertext()
+                ).strip()
+
+                if name:
+                    medicine_name = name
+                    break
+
+        # Fallback only if no medicine name exists
+        if not medicine_name:
+            medicine_name = zip_file.stem
+
+        print("Medicine:", medicine_name)
 
         # ====================================================
         # Read Sections
@@ -138,7 +158,7 @@ Content:
 
             embedding = get_embedding(text_to_embed)
 
-            doc_id = f"{medicine_name}_{title}"
+            doc_id = f"{zip_file.stem}_{title}"
 
             try:
 

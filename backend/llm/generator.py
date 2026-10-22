@@ -1,3 +1,7 @@
+import os
+import json
+import urllib.request
+import urllib.error
 import ollama
 
 def generate_rag_answer(context: str, question: str):
@@ -32,31 +36,18 @@ IMPORTANT RULES
 9. If the user asks about drug interactions, explain which medicines interact
    and what problem the interaction can cause.
 
-10. If the user asks about food, diet, or drinks related to a medicine:
+10. Answer ONLY using information present in the FDA MEDICAL CONTEXT.
 
-    FIRST check the FDA context for food, diet, vitamin, alcohol,
-    or drink interactions.
+11. NEVER use your own medical knowledge to fill missing information.
 
-    If the FDA context contains relevant information:
-    explain that information clearly.
+12. If the FDA context does not contain the answer, say:
+    "This information was not found in the retrieved FDA DailyMed data."
 
-    If the FDA context does NOT contain enough information:
-    provide GENERAL dietary guidance using your own medical knowledge.
+13. Do not provide general dietary, lifestyle, or medical advice unless it
+    is explicitly supported by the FDA MEDICAL CONTEXT.
 
-    Clearly label this as:
-    "General Dietary Guidance"
-
-11. Do NOT claim that a food must be avoided unless there is a valid reason.
-
-12. If the medicine requires consistent intake of a nutrient rather than
-    complete avoidance, explain that clearly.
-
-13. When discussing food interactions, give practical examples whenever
-    appropriate.
-
-14. If the user asks for natural or lifestyle approaches:
-    provide general educational guidance, but clearly say that this does
-    not automatically replace prescribed treatment.
+14. Do not assume that a medicine interacts with a food, drink, vitamin,
+    or another medicine unless the FDA context explicitly supports it.
 
 ========================================
 RESPONSE STYLE
@@ -107,14 +98,62 @@ ANSWER
 ========================================
 """
 
-    response = ollama.chat(
-        model="qwen2.5:3b",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
+    # 1. Check if an external cloud LLM (e.g. Groq) is configured
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if groq_api_key:
+        try:
+            model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=json.dumps({
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2
+                }).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {groq_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "PrescriptionAudit/1.0"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"Cloud LLM (Groq) request error: {e}")
 
-    return response["message"]["content"]
+    # 2. Try Ollama (Local or remote via OLLAMA_HOST)
+    ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+    model_name = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+
+    try:
+        client = ollama.Client(host=ollama_host)
+        response = client.chat(
+            model=model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+        return response["message"]["content"]
+    except Exception as e:
+        print(f"Ollama connection error at {ollama_host}: {e}")
+
+        # Graceful fallback when deployed to cloud without Ollama daemon
+        if context and context.strip():
+            return (
+                f"### Retrieved FDA DailyMed Information\n\n"
+                f"{context.strip()}\n\n"
+                f"---\n"
+                f"> **Notice**: The LLM engine is unreachable at `{ollama_host}`. "
+                f"Displaying raw retrieved FDA records above. "
+                f"To enable AI explanations in cloud deployment, set `OLLAMA_HOST` or `GROQ_API_KEY`."
+            )
+
+        return (
+            f"The assistant received your question, but could not connect to the LLM backend (`{ollama_host}`) "
+            f"and found no matching FDA records for: *{question}*. "
+            f"Please verify backend configuration or try another query."
+        )

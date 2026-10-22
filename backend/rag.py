@@ -4,7 +4,14 @@ from llm.generator import generate_rag_answer
 
 def ask(question):
 
-    results = retrieve(question)
+    # For now, treat the user's question itself as the medicine query
+    medicine = question.strip()
+
+    results = retrieve(
+        query=question,
+        medicine=medicine,
+        k=20
+    )
 
     documents = results["documents"][0]
     metadatas = results["metadatas"][0]
@@ -17,10 +24,9 @@ def ask(question):
 Medicine: {meta['medicine']}
 Section: {meta['section']}
 
-{doc[:1200]}
+{doc}
 
 --------------------------------------------------
-
 """
 
     answer = generate_rag_answer(context, question)
