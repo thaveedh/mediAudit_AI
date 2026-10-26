@@ -12,10 +12,9 @@ export interface AskResult {
   answer: string
 }
 
-// Fallback to live Render backend if VITE_API_BASE_URL is not set
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '') ||
-  'https://mediaudit-ai-gcxb.onrender.com'
+// In production, empty string uses Vercel's edge proxy (/api/* -> Render backend)
+// avoiding any browser CORS or third-party domain blocking.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -54,7 +53,7 @@ export async function fetchHealth(signal?: AbortSignal): Promise<Health> {
       status: 'offline',
       ready: false,
       demo: false,
-      detail: 'Backend service is waking up on Render. This usually takes 20-30 seconds on cold start.',
+      detail: 'Connecting to medical knowledge pipeline...',
     }
   }
 }
