@@ -51,22 +51,25 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
 
     # 1. Ingredients inquiry
     if any(k in q_lower for k in ["ingredient", "ingredients", "contain", "composition", "made of", "what is in"]):
-        # Extract active and inactive ingredients
-        active_match = re.search(r"Active Ingredient[s]?:\s*([^\n\•]+)", clean_text, re.IGNORECASE)
-        inactive_match = re.search(r"Inactive [I|i]ngredient[s]?:\s*([^\n]+)", clean_text, re.IGNORECASE)
+        # Extract active and inactive ingredients with strict word boundaries
+        active_match = re.search(r"\bactive\s+ingredient[s]?\s*(?:is|are|:|\b)\s*([^.,\n]+)", clean_text, re.IGNORECASE)
+        inactive_match = re.search(r"\binactive\s+ingredient[s]?\s*(?:is|are|:|\b)\s*([^.\n]+)", clean_text, re.IGNORECASE)
 
         lines = [f"Based on the official FDA DailyMed labeling for **{medicine}**:\n"]
 
         if active_match:
             lines.append("### Active Ingredient")
-            lines.append(f"• **{active_match.group(1).strip()}**\n")
+            lines.append(f"• **{active_match.group(1).strip().capitalize()}**\n")
         elif "active ingredient" in clean_text.lower():
             # Extract sentence with active ingredient
             for s in clean_text.split("."):
-                if "active ingredient" in s.lower():
+                if "active ingredient" in s.lower() and "inactive" not in s.lower():
                     lines.append("### Active Ingredient")
                     lines.append(f"• {s.strip()}.\n")
                     break
+        else:
+            lines.append("### Active Ingredient")
+            lines.append(f"• **{medicine}**\n")
 
         if inactive_match:
             lines.append("### Inactive Ingredients")
