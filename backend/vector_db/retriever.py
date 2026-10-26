@@ -1,38 +1,98 @@
 import os
 import json
 import gzip
+import re
 from pathlib import Path
-from utils.query_normalizer import normalize_query
+from utils.query_normalizer import normalize_query, extract_medicine
 
 _dataset = None
+_known_medicines = None
 
 
 def get_fda_dataset():
-    """Load the complete 8,118 FDA DailyMed records (4.7MB gzipped) into memory."""
-    global _dataset
+    """Load the complete 8,118 FDA DailyMed records into memory."""
+    global _dataset, _known_medicines
     if _dataset is None:
         try:
             gz_path = Path(__file__).resolve().parent.parent / "fda_dataset.json.gz"
             if gz_path.exists():
                 with gzip.open(gz_path, "rt", encoding="utf-8") as f:
                     _dataset = json.load(f)
-                    print(f"Loaded {len(_dataset)} FDA DailyMed documents into index.")
+                    _known_medicines = list({d["medicine"].lower().strip() for d in _dataset if d.get("medicine")})
+                    print(f"Loaded {len(_dataset)} FDA DailyMed documents across {len(_known_medicines)} medicines.")
             else:
                 _dataset = []
+                _known_medicines = []
         except Exception as e:
             print(f"Error loading fda_dataset.json.gz: {e}")
             _dataset = []
+            _known_medicines = []
     return _dataset
 
 
-# Curated FDA records for core medicines not present in the Part 6 dump (e.g. Warfarin)
+def get_known_medicines():
+    global _known_medicines
+    if _known_medicines is None:
+        get_fda_dataset()
+    return _known_medicines or []
+
+
+# Curated FDA records for key baseline medicines (Warfarin, Ibuprofen, Metformin)
 CURATED_FDA_DATA = {
+    "ibuprofen": {
+        "INGREDIENTS": (
+            "Ibuprofen",
+            "DESCRIPTION & INGREDIENTS",
+            "Active Ingredient: Ibuprofen (200 mg in OTC tablets; 400 mg, 600 mg, 800 mg in prescription formulations) — a nonsteroidal anti-inflammatory drug (NSAID).\n"
+            "Inactive Ingredients: Colloidal silicon dioxide, croscarmellose sodium, hypromellose 2910, hydroxypropyl cellulose, magnesium stearate, microcrystalline cellulose, polyethylene glycol 400, pregelatinized starch, povidone K-90, sodium lauryl sulphate, titanium dioxide."
+        ),
+        "INDICATIONS": (
+            "Ibuprofen",
+            "INDICATIONS AND USAGE",
+            "• Relief of mild to moderate pain (such as headache, toothache, muscular ache, backache, arthritis, and menstrual cramps).\n"
+            "• Reduction of fever.\n"
+            "• Relief of signs and symptoms of rheumatoid arthritis and osteoarthritis."
+        ),
+        "ADVERSE": (
+            "Ibuprofen",
+            "ADVERSE REACTIONS & SIDE EFFECTS",
+            "• Common Side Effects: Nausea, epigastric pain, heartburn, indigestion, diarrhea, constipation, dizziness, headache, abdominal distress.\n"
+            "• Serious Adverse Events: Stomach bleeding or ulcers (black/tarry stools), fluid retention, worsening high blood pressure, and renal (kidney) impairment."
+        ),
+        "INTERACTIONS": (
+            "Ibuprofen",
+            "DRUG INTERACTIONS",
+            "• Aspirin & other NSAIDs (Naproxen): Increases gastrointestinal bleeding risks and diminishes aspirin's cardioprotective effect.\n"
+            "• Blood Thinners (Warfarin, Apixaban): Substantially increases bleeding danger.\n"
+            "• ACE Inhibitors & Diuretics: Ibuprofen may reduce their blood-pressure-lowering effectiveness.\n"
+            "• Lithium & Methotrexate: Ibuprofen can decrease their clearance, increasing toxicity risks."
+        ),
+        "FOOD": (
+            "Ibuprofen",
+            "FOOD AND DIETARY INTERACTIONS",
+            "• Take with food, milk, or a full glass of water to reduce stomach upset and mucosal irritation.\n"
+            "• Avoid alcohol: Drinking 3 or more alcoholic drinks every day while taking ibuprofen significantly increases the risk of severe stomach bleeding."
+        ),
+        "WARNINGS": (
+            "Ibuprofen",
+            "WARNINGS & PRECAUTIONS",
+            "• Cardiovascular Risk: NSAIDs may cause an increased risk of serious cardiovascular thrombotic events, myocardial infarction (heart attack), and stroke.\n"
+            "• Gastrointestinal Risk: Severe gastrointestinal inflammation, ulceration, bleeding, and perforation of stomach or intestines can occur at any time without warning."
+        ),
+        "DOSAGE": (
+            "Ibuprofen",
+            "DOSAGE AND ADMINISTRATION",
+            "• Adults & Children 12+: 200 mg to 400 mg every 4 to 6 hours while symptoms persist.\n"
+            "• Maximum OTC Dose: Do not exceed 1,200 mg in 24 hours unless directed by a doctor.\n"
+            "• Use the lowest effective dose for the shortest duration necessary."
+        )
+    },
     "warfarin": {
         "INGREDIENTS": (
             "Warfarin",
             "INGREDIENTS & COMPOSITION",
-            "• Active Ingredient: Warfarin Sodium (1 mg, 2 mg, 2.5 mg, 3 mg, 4 mg, 5 mg, 6 mg, 7.5 mg, 10 mg scored tablets) — a vitamin K antagonist anticoagulant.\n"
-            "• Inactive Ingredients: Lactose monohydrate, magnesium stearate, povidone, corn starch, and color additives (D&C Yellow No. 10, FD&C Blue No. 1, FD&C Red No. 40)."
+            "Active Ingredient: Warfarin Sodium (1 mg, 2 mg, 2.5 mg, 3 mg, 4 mg, 5 mg, 6 mg, 7.5 mg, 10 mg scored tablets) — a vitamin K antagonist anticoagulant.\n"
+            "Inactive Ingredients: Lactose monohydrate, magnesium stearate, povidone, corn starch, and color additives (D&C Yellow No. 10, FD&C Blue No. 1, FD&C Red No. 40)."
         ),
         "INDICATIONS": (
             "Warfarin",
@@ -93,7 +153,7 @@ def detect_section_intent(query: str) -> str:
     if any(k in q for k in ["ingredient", "ingredients", "contain", "contains", "composition", "made of", "what is in", "components"]):
         return "INGREDIENTS"
 
-    if any(k in q for k in ["food", "foods", "diet", "dietary", "eat", "drink", "avoid", "alcohol", "grapefruit", "cranberry", "vitamin"]):
+    if any(k in q for k in ["food", "foods", "diet", "dietary", "eat", "drink", "avoid", "alcohol", "grapefruit", "cranberry", "vitamin", "vitamins"]):
         return "FOOD"
 
     if any(k in q for k in ["side effect", "side effects", "adverse", "reaction", "reactions", "danger", "harm", "problem"]):
@@ -114,67 +174,84 @@ def detect_section_intent(query: str) -> str:
     return "ALL"
 
 
+def clean_section_text(raw_text: str) -> str:
+    """Strip XML headers and format clean content."""
+    text = raw_text.strip()
+    if "Content:" in text:
+        text = text.split("Content:", 1)[1].strip()
+    # Normalize excessive whitespace/newlines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def retrieve(query: str, medicine: str = None, k: int = 5):
     print("=" * 60)
     print("USER QUERY:", query)
 
-    normalized_query = normalize_query(query).lower()
-    print("NORMALIZED QUERY:", normalized_query)
+    # 1. Detect target medicine
+    known_meds = get_known_medicines()
+    detected_medicine = extract_medicine(query, known_meds)
+    print("DETECTED MEDICINE:", detected_medicine)
 
+    # 2. Detect section intent
     target_intent = detect_section_intent(query)
     print("DETECTED INTENT:", target_intent)
 
     documents = []
     metadatas = []
 
-    # 1. Search the full FDA DailyMed dataset (8,118 records)
+    # 3. Check curated data first if available for high-quality structured answers
+    if detected_medicine and detected_medicine in CURATED_FDA_DATA:
+        curated_dict = CURATED_FDA_DATA[detected_medicine]
+        if target_intent != "ALL" and target_intent in curated_dict:
+            med_name, sec_name, content = curated_dict[target_intent]
+            doc_text = f"Medicine: {med_name}\nSection: {sec_name}\n\n{content}"
+            documents.append(doc_text)
+            metadatas.append({"medicine": med_name, "section": sec_name, "content": content})
+            return {"documents": [documents], "metadatas": [metadatas]}
+
+    # 4. Search the full 8,118 FDA DailyMed dataset
     dataset = get_fda_dataset()
-    if dataset:
+    if dataset and detected_medicine:
         target_sections = SECTION_MAP.get(target_intent, [])
 
-        # Find matching medicine records
+        # Filter strictly for the target medicine
         med_matches = [
             d for d in dataset
-            if d["medicine"].lower() in normalized_query or any(word in d["medicine"].lower() for word in normalized_query.split() if len(word) > 3)
+            if d["medicine"].lower().strip() == detected_medicine or detected_medicine in d["medicine"].lower()
         ]
 
         if med_matches:
-            # Filter by the section matching the user's intent
+            # Filter by the section matching user intent
             section_matches = [
                 d for d in med_matches
                 if d["section"] in target_sections
             ]
 
-            # If specific section found, use it!
-            selected = section_matches if section_matches else med_matches[:3]
+            selected = section_matches if section_matches else med_matches[:2]
 
-            # Take the best matching document without duplicates
-            seen_texts = set()
+            seen_content = set()
             for d in selected:
-                clean_text = d["text"].strip()
-                if clean_text not in seen_texts:
-                    seen_texts.add(clean_text)
-                    documents.append(clean_text)
-                    metadatas.append({"medicine": d["medicine"], "section": d["section"]})
+                raw_text = d["text"].strip()
+                content = clean_section_text(raw_text)
+                if content not in seen_content:
+                    seen_content.add(content)
+                    doc_formatted = f"Medicine: {d['medicine']}\nSection: {d['section']}\n\n{content}"
+                    documents.append(doc_formatted)
+                    metadatas.append({"medicine": d["medicine"], "section": d["section"], "content": content})
                 if len(documents) >= 2:
                     break
 
-    # 2. Check curated FDA knowledge base (e.g. Warfarin) if not in the Part 6 dump
-    if not documents:
+    # 5. If no documents found, try curated data fallback
+    if not documents and detected_medicine:
         for med_key, section_dict in CURATED_FDA_DATA.items():
-            if med_key in normalized_query or med_key in query.lower():
-                if target_intent != "ALL" and target_intent in section_dict:
-                    med_name, section_title, content = section_dict[target_intent]
-                    doc_text = f"Medicine: {med_name}\nSection: {section_title}\n\n{content}"
+            if med_key in detected_medicine or detected_medicine in med_key:
+                if target_intent in section_dict:
+                    med_name, sec_name, content = section_dict[target_intent]
+                    doc_text = f"Medicine: {med_name}\nSection: {sec_name}\n\n{content}"
                     documents.append(doc_text)
-                    metadatas.append({"medicine": med_name, "section": section_title})
-                else:
-                    for key in ["INDICATIONS", "ADVERSE", "WARNINGS"]:
-                        if key in section_dict:
-                            med_name, section_title, content = section_dict[key]
-                            doc_text = f"Medicine: {med_name}\nSection: {section_title}\n\n{content}"
-                            documents.append(doc_text)
-                            metadatas.append({"medicine": med_name, "section": section_title})
+                    metadatas.append({"medicine": med_name, "section": sec_name, "content": content})
+                    break
 
     print(f"RESULTS FOUND: {len(documents)}")
     return {"documents": [documents], "metadatas": [metadatas]}
