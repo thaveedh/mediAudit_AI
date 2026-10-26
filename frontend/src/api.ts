@@ -12,7 +12,10 @@ export interface AskResult {
   answer: string
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+// Fallback to live Render backend if VITE_API_BASE_URL is not set
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '') ||
+  'https://mediaudit-ai-gcxb.onrender.com'
 
 async function parseError(response: Response): Promise<string> {
   try {
