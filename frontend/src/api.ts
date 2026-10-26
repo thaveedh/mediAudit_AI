@@ -54,22 +54,36 @@ export async function fetchHealth(signal?: AbortSignal): Promise<Health> {
       status: 'offline',
       ready: false,
       demo: false,
-      detail: 'Cannot reach the API. Start it with: uvicorn app.main:app --reload',
+      detail: 'Backend service is waking up on Render. This usually takes 20-30 seconds on cold start.',
     }
   }
 }
 
 export async function askQuestion(question: string, signal?: AbortSignal): Promise<AskResult> {
-  const response = await fetch(`${API_BASE}/api/ask`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
-    signal,
-  })
+  try {
+    const response = await fetch(`${API_BASE}/api/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+      signal,
+    })
 
-  if (!response.ok) {
-    throw new Error(await parseError(response))
+    if (!response.ok) {
+      throw new Error(await parseError(response))
+    }
+
+    return (await response.json()) as AskResult
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error
+    }
+
+    if (error instanceof TypeError && error.message.toLowerCase().includes('fetch')) {
+      throw new Error(
+        'Backend server is waking up from sleep. Please wait ~15-20 seconds and click send again!'
+      )
+    }
+
+    throw error
   }
-
-  return (await response.json()) as AskResult
 }

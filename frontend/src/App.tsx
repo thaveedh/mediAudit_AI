@@ -22,13 +22,35 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const controller = new AbortController()
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
 
-    fetchHealth(controller.signal)
-      .then(setHealth)
-      .catch(() => undefined)
+    const check = () => {
+      const controller = new AbortController()
 
-    return () => controller.abort()
+      fetchHealth(controller.signal)
+        .then((res) => {
+          if (!cancelled) {
+            setHealth(res)
+            // If the server is offline or waking up, check again in 4 seconds
+            if (!res.ready) {
+              timer = setTimeout(check, 4000)
+            }
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            timer = setTimeout(check, 4000)
+          }
+        })
+    }
+
+    check()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
   }, [])
 
   useEffect(() => {
