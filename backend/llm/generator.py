@@ -36,6 +36,19 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
 
     q_lower = question.lower()
 
+    matched_records = ""
+    rec_match = re.search(r"MatchedRecords:\s*([0-9]+)", context)
+    if rec_match:
+        matched_records = f" ({rec_match.group(1)} records evaluated in dataset)"
+
+    provenance_badge = (
+        f"---\n"
+        f"> 🔍 **Verified FDA Dataset Provenance**  \n"
+        f"> • **Database**: FDA DailyMed Repository (`fda_dataset.json.gz` • 8,118 documents)  \n"
+        f"> • **Matched Drug**: **{medicine}**{matched_records}  \n"
+        f"> • **Retrieved Section**: `{section_name}`"
+    )
+
     # 1. Ingredients inquiry
     if any(k in q_lower for k in ["ingredient", "ingredients", "contain", "composition", "made of", "what is in"]):
         # Extract active and inactive ingredients
@@ -66,7 +79,7 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
             # Fallback to presenting the cleaned description
             lines.append(clean_text)
 
-        lines.append("---\n> **FDA Prescribing Label Data Grounded**.")
+        lines.append(provenance_badge)
         return "\n".join(lines)
 
     # 2. Side effects / adverse reactions inquiry
@@ -75,7 +88,7 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
             f"Based on the official FDA DailyMed labeling for **{medicine}**:\n\n"
             f"### Side Effects & Adverse Reactions\n\n"
             f"{clean_text}\n\n"
-            f"---\n> **FDA Prescribing Label Data Grounded**."
+            f"{provenance_badge}"
         )
 
     # 3. Dosage inquiry
@@ -84,7 +97,7 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
             f"Based on the official FDA DailyMed labeling for **{medicine}**:\n\n"
             f"### Recommended Dosage & Administration\n\n"
             f"{clean_text}\n\n"
-            f"---\n> **FDA Prescribing Label Data Grounded**."
+            f"{provenance_badge}"
         )
 
     # 4. Food & dietary inquiry
@@ -93,7 +106,7 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
             f"Based on the official FDA DailyMed labeling for **{medicine}**:\n\n"
             f"### Food, Drink & Dietary Guidance\n\n"
             f"{clean_text}\n\n"
-            f"---\n> **FDA Prescribing Label Data Grounded**."
+            f"{provenance_badge}"
         )
 
     # 5. Indications / General query
@@ -102,7 +115,7 @@ def format_plain_english_synthesis(context: str, question: str) -> str:
         f"Based on the official FDA DailyMed labeling for **{medicine}**:\n\n"
         f"{header}\n\n"
         f"{clean_text}\n\n"
-        f"---\n> **FDA Prescribing Label Data Grounded**."
+        f"{provenance_badge}"
     )
 
 

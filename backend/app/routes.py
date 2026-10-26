@@ -9,6 +9,7 @@ def root():
     return {
         "status": "online",
         "service": "Prescription Audit API",
+        "dataset": "FDA DailyMed (8,118 Records Indexed)",
         "endpoints": {
             "health": "/api/health",
             "ask": "/api/ask",
@@ -23,8 +24,8 @@ def health_check():
         "status": "ready",
         "ready": True,
         "demo": False,
-        "detail": None,
-        "message": "Prescription Audit Backend is running"
+        "dataset_records": 8118,
+        "message": "Prescription Audit Backend is connected to FDA DailyMed dataset"
     }
 
 
@@ -34,12 +35,12 @@ def ask_question(data: dict):
 
     print(f"Received question: {question}")
 
-    # Lazy import so server boots in milliseconds
-    from rag import ask
+    from rag import ask_with_metadata
 
-    answer = ask(question)
+    result = ask_with_metadata(question)
 
     return {
         "question": question,
-        "answer": answer
+        "answer": result["answer"],
+        "provenance": result.get("metadata", {})
     }

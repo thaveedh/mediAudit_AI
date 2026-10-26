@@ -37,56 +37,8 @@ def get_known_medicines():
     return _known_medicines or []
 
 
-# Curated FDA records for key baseline medicines (Warfarin, Ibuprofen, Metformin)
+# Baseline FDA records for medicines not in the primary Part 6 dump (e.g. Warfarin)
 CURATED_FDA_DATA = {
-    "ibuprofen": {
-        "INGREDIENTS": (
-            "Ibuprofen",
-            "DESCRIPTION & INGREDIENTS",
-            "Active Ingredient: Ibuprofen (200 mg in OTC tablets; 400 mg, 600 mg, 800 mg in prescription formulations) — a nonsteroidal anti-inflammatory drug (NSAID).\n"
-            "Inactive Ingredients: Colloidal silicon dioxide, croscarmellose sodium, hypromellose 2910, hydroxypropyl cellulose, magnesium stearate, microcrystalline cellulose, polyethylene glycol 400, pregelatinized starch, povidone K-90, sodium lauryl sulphate, titanium dioxide."
-        ),
-        "INDICATIONS": (
-            "Ibuprofen",
-            "INDICATIONS AND USAGE",
-            "• Relief of mild to moderate pain (such as headache, toothache, muscular ache, backache, arthritis, and menstrual cramps).\n"
-            "• Reduction of fever.\n"
-            "• Relief of signs and symptoms of rheumatoid arthritis and osteoarthritis."
-        ),
-        "ADVERSE": (
-            "Ibuprofen",
-            "ADVERSE REACTIONS & SIDE EFFECTS",
-            "• Common Side Effects: Nausea, epigastric pain, heartburn, indigestion, diarrhea, constipation, dizziness, headache, abdominal distress.\n"
-            "• Serious Adverse Events: Stomach bleeding or ulcers (black/tarry stools), fluid retention, worsening high blood pressure, and renal (kidney) impairment."
-        ),
-        "INTERACTIONS": (
-            "Ibuprofen",
-            "DRUG INTERACTIONS",
-            "• Aspirin & other NSAIDs (Naproxen): Increases gastrointestinal bleeding risks and diminishes aspirin's cardioprotective effect.\n"
-            "• Blood Thinners (Warfarin, Apixaban): Substantially increases bleeding danger.\n"
-            "• ACE Inhibitors & Diuretics: Ibuprofen may reduce their blood-pressure-lowering effectiveness.\n"
-            "• Lithium & Methotrexate: Ibuprofen can decrease their clearance, increasing toxicity risks."
-        ),
-        "FOOD": (
-            "Ibuprofen",
-            "FOOD AND DIETARY INTERACTIONS",
-            "• Take with food, milk, or a full glass of water to reduce stomach upset and mucosal irritation.\n"
-            "• Avoid alcohol: Drinking 3 or more alcoholic drinks every day while taking ibuprofen significantly increases the risk of severe stomach bleeding."
-        ),
-        "WARNINGS": (
-            "Ibuprofen",
-            "WARNINGS & PRECAUTIONS",
-            "• Cardiovascular Risk: NSAIDs may cause an increased risk of serious cardiovascular thrombotic events, myocardial infarction (heart attack), and stroke.\n"
-            "• Gastrointestinal Risk: Severe gastrointestinal inflammation, ulceration, bleeding, and perforation of stomach or intestines can occur at any time without warning."
-        ),
-        "DOSAGE": (
-            "Ibuprofen",
-            "DOSAGE AND ADMINISTRATION",
-            "• Adults & Children 12+: 200 mg to 400 mg every 4 to 6 hours while symptoms persist.\n"
-            "• Maximum OTC Dose: Do not exceed 1,200 mg in 24 hours unless directed by a doctor.\n"
-            "• Use the lowest effective dose for the shortest duration necessary."
-        )
-    },
     "warfarin": {
         "INGREDIENTS": (
             "Warfarin",
@@ -200,17 +152,7 @@ def retrieve(query: str, medicine: str = None, k: int = 5):
     documents = []
     metadatas = []
 
-    # 3. Check curated data first if available for high-quality structured answers
-    if detected_medicine and detected_medicine in CURATED_FDA_DATA:
-        curated_dict = CURATED_FDA_DATA[detected_medicine]
-        if target_intent != "ALL" and target_intent in curated_dict:
-            med_name, sec_name, content = curated_dict[target_intent]
-            doc_text = f"Medicine: {med_name}\nSection: {sec_name}\n\n{content}"
-            documents.append(doc_text)
-            metadatas.append({"medicine": med_name, "section": sec_name, "content": content})
-            return {"documents": [documents], "metadatas": [metadatas]}
-
-    # 4. Search the full 8,118 FDA DailyMed dataset
+    # 3. DIRECTLY SEARCH THE FULL 8,118 FDA DAILYMED DATASET FIRST
     dataset = get_fda_dataset()
     if dataset and detected_medicine:
         target_sections = SECTION_MAP.get(target_intent, [])
@@ -222,6 +164,7 @@ def retrieve(query: str, medicine: str = None, k: int = 5):
         ]
 
         if med_matches:
+            print(f"HITTING DATASET: Found {len(med_matches)} FDA documents for {detected_medicine}")
             # Filter by the section matching user intent
             section_matches = [
                 d for d in med_matches
@@ -236,22 +179,46 @@ def retrieve(query: str, medicine: str = None, k: int = 5):
                 content = clean_section_text(raw_text)
                 if content not in seen_content:
                     seen_content.add(content)
-                    doc_formatted = f"Medicine: {d['medicine']}\nSection: {d['section']}\n\n{content}"
+                    doc_formatted = (
+                        f"Medicine: {d['medicine']}\n"
+                        f"Section: {d['section']}\n"
+                        f"MatchedRecords: {len(med_matches)}\n"
+                        f"SourceFile: fda_dataset.json.gz (8,118 records)\n\n"
+                        f"{content}"
+                    )
                     documents.append(doc_formatted)
-                    metadatas.append({"medicine": d["medicine"], "section": d["section"], "content": content})
+                    metadatas.append({
+                        "medicine": d["medicine"],
+                        "section": d["section"],
+                        "content": content,
+                        "source": "FDA DailyMed Database (8,118 records)",
+                        "matched_records": len(med_matches)
+                    })
                 if len(documents) >= 2:
                     break
 
-    # 5. If no documents found, try curated data fallback
+    # 4. If no documents found in the dataset, check curated baseline reference (e.g. Warfarin)
     if not documents and detected_medicine:
         for med_key, section_dict in CURATED_FDA_DATA.items():
             if med_key in detected_medicine or detected_medicine in med_key:
                 if target_intent in section_dict:
                     med_name, sec_name, content = section_dict[target_intent]
-                    doc_text = f"Medicine: {med_name}\nSection: {sec_name}\n\n{content}"
+                    doc_text = (
+                        f"Medicine: {med_name}\n"
+                        f"Section: {sec_name}\n"
+                        f"MatchedRecords: 1\n"
+                        f"SourceFile: Curated DailyMed Reference\n\n"
+                        f"{content}"
+                    )
                     documents.append(doc_text)
-                    metadatas.append({"medicine": med_name, "section": sec_name, "content": content})
+                    metadatas.append({
+                        "medicine": med_name,
+                        "section": sec_name,
+                        "content": content,
+                        "source": "Curated DailyMed Reference",
+                        "matched_records": 1
+                    })
                     break
 
-    print(f"RESULTS FOUND: {len(documents)}")
+    print(f"RESULTS RETRIEVED FROM DATASET: {len(documents)}")
     return {"documents": [documents], "metadatas": [metadatas]}
